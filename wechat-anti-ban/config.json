@@ -1,0 +1,36 @@
+{
+  "hotkey": "numpad_enter",
+  "auto_send": true,
+  "auto_start": true,
+  "paused": false,
+  "keyword_detect_enabled": true,
+  "keywords": "转账，刷单，本金，佣金，返本，返佣，骗子，立返，刷手，被骗，骗人",
+  "gif": {
+    "width": 240,
+    "height": 240,
+    "font_family": "微软雅黑",
+    "font_size": 26,
+    "line_height": 27,
+    "text_color": "#000000",
+    "bg_color": "#FFFFFF",
+    "margin_left": 5,
+    "margin_right": 5,
+    "margin_top": 5,
+    "margin_bottom": 5,
+    "blink_last_punct": true,
+    "blink_interval_ms": 500,
+    "max_chars": 64,
+    "pagination_enabled": true,
+    "title_enabled": true,
+    "title_color": "#FF0000",
+    "title_font_size": 32,
+    "bg_image_path": "",
+    "bg_image_opacity": 20
+  },
+  "temp_dir": "./temp",
+  "temp_cleanup_hours": 24,
+  "wechat": {
+    "process_name": "WeChat.exe",
+    "window_title_keyword": "微信"
+  }
+}

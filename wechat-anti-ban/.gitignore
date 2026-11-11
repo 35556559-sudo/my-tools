@@ -1,0 +1,60 @@
+# ===== Python 缓存与编译文件 =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ===== 构建 / 打包产物 =====
+build/
+dist/
+installer_output/
+*.egg-info/
+*.egg
+pip-log.txt
+
+# ===== 虚拟环境 =====
+venv/
+.venv/
+env/
+ENV/
+
+# ===== 运行时生成的临时数据 =====
+temp/
+video_work/
+ocr_result.txt
+*.log
+*.tmp
+
+# ===== 调试 / 探测脚本与截图（开发排障用，不入库） =====
+probe_tree.py
+deep_probe.py
+探测控件树.py
+验证输入框读取.py
+双击*.bat
+控件树.txt
+deep_tree.txt
+input_box_detected.png
+input_crop.png
+
+# ===== 本地备份与本地存储（含个人数据，禁止上传） =====
+备份_*
+*.local.json
+备份_本地存储_*
+
+# ===== 密钥 / 环境变量（防止凭证泄露） =====
+.env
+.env.*
+*.secret
+credentials.json
+
+# ===== IDE / 编辑器 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== Windows 系统文件 =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
