@@ -9,8 +9,10 @@ PsExec64.exe
 # 编译产物（保留 .cs 源码，用 csc 自行编译）
 *.dll
 
-# 个人截图（不随仓库分发）
+# 个人截图（不随仓库分发），但保留 images 目录下的说明配图
 *.png
+!images/
+!images/*.png
 
 # 个人数据 / 安装包目录
 备份_RDPWrapper/
