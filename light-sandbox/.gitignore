@@ -1,0 +1,35 @@
+# ===== 轻沙箱 light-sandbox 子目录忽略规则 =====
+
+# 含真实账户密码的本地配置（仓库只提供 .example 模板）
+light_sandbox_config.json
+
+# 第三方工具：微软 Sysinternals PsExec，需自行从官网下载
+PsExec64.exe
+
+# 编译产物（保留 .cs 源码，用 csc 自行编译）
+*.dll
+
+# 个人截图（不随仓库分发）
+*.png
+
+# 个人数据 / 安装包目录
+备份_RDPWrapper/
+RDPWrapper安装包/
+聊天记录隔离沙箱临时文件*/
+
+# 个人梯子相关脚本与配置
+梯子沙箱桌面.rdp
+一键启动梯子沙箱.bat
+一键启动梯子沙箱.ps1
+彻底关闭梯子.bat
+
+# 内部调试 / 冗余文件
+为新沙箱生成桌面版.ps1
+pe_pdb.py
+pe_pdb2.py
+compare_termsrv.py
+交接手册.md
+
+# Python 缓存
+__pycache__/
+*.pyc

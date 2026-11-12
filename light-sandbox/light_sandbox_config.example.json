@@ -1,0 +1,27 @@
+{
+  "sandbox_root": "D:\\LightSandbox\\data",
+  "profile_root": "C:\\Users",
+  "sandboxes": [
+    {
+      "name": "示例沙箱",
+      "account": "sb_demo",
+      "password": "请在此填入该沙箱账户的登录密码",
+      "as_admin": true,
+      "dir": "D:\\LightSandbox\\data\\demo",
+      "profile_dir": "",
+      "apps": [
+        {
+          "name": "示例软件",
+          "exe": "C:/Program Files/Example/app.exe"
+        },
+        {
+          "name": "示例浏览器（带代理参数）",
+          "exe": "C:/Program Files/Example/browser.exe",
+          "args": "--proxy-server=http://127.0.0.1:7897 --user-data-dir=D:/LightSandbox/data/demo/browser-data"
+        }
+      ],
+      "proxy_port": 7897,
+      "proxy_enabled": false
+    }
+  ]
+}

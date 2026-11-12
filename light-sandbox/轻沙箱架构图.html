@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>轻沙箱 LightSandbox · 隔离原理示意</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f6f8fa; padding: 24px; }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 22px; color: #0f172a; text-align: center; }
+  .sub { text-align: center; color: #64748b; font-size: 13px; margin: 6px 0 20px; }
+  .zone { border: 2px solid; border-radius: 12px; padding: 14px 16px; margin-bottom: 18px; position: relative; }
+  .zone-title { position: absolute; top: -13px; left: 16px; background: #fff; padding: 0 8px; font-weight: 700; font-size: 14px; }
+  .zone-main { border-color: #93c5fd; }
+  .zone-main .zone-title { color: #1d4ed8; }
+  .zone-mgr { border-color: #fcd34d; }
+  .zone-mgr .zone-title { color: #b45309; }
+  .zone-sb { border-color: #86efac; }
+  .zone-sb .zone-title { color: #15803d; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .card { flex: 1 1 200px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.55; }
+  .card b { font-size: 14px; display: block; margin-bottom: 4px; }
+  .tag { display: inline-block; background: #eff6ff; color: #1d4ed8; border-radius: 4px; padding: 1px 6px; font-size: 12px; margin-right: 4px; }
+  .tag.g { background: #f0fdf4; color: #15803d; }
+  .tag.o { background: #fff7ed; color: #c2410c; }
+  .mgr-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .step { background: #fffbeb; border: 1px solid #fde68a; border-radius: 20px; padding: 6px 14px; font-size: 13px; color: #92400e; }
+  .arrow { text-align: center; font-size: 22px; color: #64748b; line-height: 1; margin: -6px 0 10px; }
+  .sb-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .sb { flex: 1 1 300px; background: #f0fdf4; border: 1px dashed #4ade80; border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.6; }
+  .sb b { color: #15803d; font-size: 14px; }
+  .sb .path { font-family: Consolas, monospace; font-size: 12px; color: #334155; background: #dcfce7; border-radius: 4px; padding: 1px 5px; }
+  .note { margin-top: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #334155; line-height: 1.7; }
+  .note b { color: #0f766e; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #475569; margin-top: 8px; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 4px; vertical-align: -2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>轻沙箱 LightSandbox · 隔离原理示意</h1>
+  <div class="sub">示意结构 · 非官方架构图 · 同一台电脑上的数据/账号隔离</div>
+
+  <!-- 主系统 -->
+  <div class="zone zone-main">
+    <div class="zone-title">主系统（Administrator 账户）</div>
+    <div class="cards">
+      <div class="card"><b>主微信</b>登录账号 A<br><span class="tag">数据在主系统</span></div>
+      <div class="card"><b>主豆包</b>登录账号 B<br><span class="tag">数据在主系统</span></div>
+      <div class="card"><b>主系统数据</b>我的文档 / AppData / 注册表 HKCU<br><span class="tag">与沙箱完全分开</span></div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ 轻沙箱以独立账户启动沙箱内软件（互不干扰） ▼</div>
+
+  <!-- 管理器 -->
+  <div class="zone zone-mgr">
+    <div class="zone-title">轻沙箱管理器（双击「启动沙箱.bat」打开）</div>
+    <div class="mgr-steps">
+      <span class="step">① 新建沙箱</span>
+      <span class="step">② 安装应用（装到 沙箱目录\apps）</span>
+      <span class="step">③ 启动应用（以 sb_xxx 账户 + PsExec 在当前桌面打开）</span>
+      <span class="step">④ 删除沙箱（账户+资料+数据一并清理）</span>
+    </div>
+  </div>
+
+  <div class="arrow">▼ 沙箱区（每格 = 一个独立 Windows 账户 + 一个独立数据目录） ▼</div>
+
+  <!-- 沙箱区 -->
+  <div class="zone zone-sb">
+    <div class="zone-title">沙箱区 · C:\Sandbox\</div>
+    <div class="sb-row">
+      <div class="sb">
+        <b>沙箱1：wechat1</b>（账户 sb_wechat1）<br>
+        微信安装：<span class="path">C:\Sandbox\wechat1\apps\微信</span><br>
+        独立文档 / AppData → 登录<u>账号 C</u><br>
+        独立注册表 HKCU<br>
+        <span class="tag g">可反复重装</span><span class="tag g">数据持久</span>
+      </div>
+      <div class="sb">
+        <b>沙箱2：wechat2</b>（账户 sb_wechat2）<br>
+        微信安装：<span class="path">C:\Sandbox\wechat2\apps\微信</span><br>
+        独立文档 / AppData → 登录<u>账号 D</u><br>
+        独立注册表 HKCU<br>
+        <span class="tag g">与沙箱1、主系统互不影响</span>
+      </div>
+      <div class="sb">
+        <b>还可再加：doubao1 / qq1 / …</b><br>
+        豆包、QQ 等任何软件都可各自建沙箱<br>
+        想开几个账号，就建几个沙箱<br>
+        <span class="tag o">秒级启动 · 按 MB 计内存 · 无需虚拟化</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>结论：</b>同一软件（微信/豆包）在沙箱里想装几套、想登几个不同账号都可以，各沙箱与主系统之间的
+    数据、登录态、用户配置互不可见；软件数据持久保存，可反复重装。轻沙箱做的是<b>数据/账号隔离</b>，
+    不是防病毒沙箱。若对比虚拟机：不用装系统、不开虚拟化、启动秒级、内存按 MB 计——更轻量。
+  </div>
+  <div class="legend">
+    <span><i style="background:#93c5fd"></i>主系统（隔离前）</span>
+    <span><i style="background:#fcd34d"></i>轻沙箱管理器</span>
+    <span><i style="background:#86efac"></i>沙箱（独立账户+独立数据）</span>
+  </div>
+</div>
+</body>
+</html>
