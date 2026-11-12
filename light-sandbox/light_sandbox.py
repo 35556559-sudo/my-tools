@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-轻沙箱 LightSandbox v1.0
-========================
+轻沙箱（类虚拟机）LightSandbox v1.0
+====================================
 Windows 应用隔离沙箱管理器（比虚拟机更轻量）
 
 原理：不装虚拟机、不装驱动。每个沙箱 = 一个独立的 Windows 账户 + 一个独立的数据目录。
@@ -544,7 +544,7 @@ def gui_main():
             self.root = root
             self.cfg = load_config()
             self.current = None      # 当前选中的沙箱 dict
-            root.title("轻沙箱 LightSandbox · 应用隔离沙箱")
+            root.title("轻沙箱（类虚拟机）· 应用隔离沙箱")
             root.geometry("900x600")
             root.minsize(820, 540)
 

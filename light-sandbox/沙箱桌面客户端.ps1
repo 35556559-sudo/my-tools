@@ -1,4 +1,4 @@
-﻿# 轻沙箱 RDP 客户端（不依赖 mstsc.exe，直接用系统 mstscax.dll 控件）
+﻿# 轻沙箱（类虚拟机）RDP 客户端（不依赖 mstsc.exe，直接用系统 mstscax.dll 控件）
 # 由主程序通过 -UserName/-Password 参数传入沙箱账户，在独立窗口显示完整沙箱桌面
 param(
     [string]$Server = "127.0.0.2",

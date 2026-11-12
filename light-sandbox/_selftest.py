@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""轻沙箱自检脚本（临时，测完删除）"""
+"""轻沙箱（类虚拟机）自检脚本（临时，测完删除）"""
 import os
 import sys
 import time
