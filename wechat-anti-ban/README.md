@@ -3,6 +3,18 @@
 一款配合微信 PC 版使用的 Windows 桌面工具。在微信聊天框打完字后，按一下快捷键，
 文字会自动转换成一张纯文字 GIF 图片并发送出去，让原本以文本形式存在的内容以图片形式传递。
 
+## 下载使用（普通用户直接下 EXE）
+
+普通用户不用装 Python，下载后双击即可运行：
+
+- 最新版下载地址（v1.0）：[WechatAntiBan-Setup-v1.0.exe](https://github.com/35556559-sudo/my-tools/releases/download/wechat-anti-ban-v1.0/WechatAntiBan-Setup-v1.0.exe)
+- 更多版本与更新说明：[Release 页面](https://github.com/35556559-sudo/my-tools/releases/tag/wechat-anti-ban-v1.0)
+
+下载后得到 `WechatAntiBan-Setup-v1.0.exe`，右键以管理员身份运行，按界面提示操作即可。
+开发者若想从源码运行，见下文「运行环境」和「自行打包」。
+
+**联系方式（修改建议 / 合作）：微信 damin7**
+
 ## 讲解视频
 
 完整操作讲解视频（抖音，手机端观看体验更佳）：[点击观看讲解视频](https://v.douyin.com/o5f1DOshz9s/)
