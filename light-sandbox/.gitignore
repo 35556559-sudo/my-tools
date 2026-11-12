@@ -35,3 +35,8 @@ compare_termsrv.py
 # Python 缓存
 __pycache__/
 *.pyc
+
+# PyInstaller 打包产物
+*.spec
+build/
+dist/

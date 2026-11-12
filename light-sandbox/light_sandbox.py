@@ -29,7 +29,20 @@ import ctypes
 import urllib.request
 import threading
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+def _bootstrap_dirs():
+    """区分两个目录：
+    RESOURCE_DIR —— 程序自带的只读资源（ps1、图标等），打包后位于 PyInstaller 临时解压目录；
+    APP_DIR      —— 可写、需持久化的工作目录（config、data、PsExec），打包后是 exe 所在目录。"""
+    if getattr(sys, "frozen", False):
+        resource_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(sys.executable)))
+        app_dir = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        resource_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = resource_dir
+    return app_dir, resource_dir
+
+
+APP_DIR, RESOURCE_DIR = _bootstrap_dirs()
 CONFIG_PATH = os.path.join(APP_DIR, "light_sandbox_config.json")
 PSEXEC_PATH = os.path.join(APP_DIR, "PsExec64.exe")
 PSEXEC_URL = "https://live.sysinternals.com/PsExec64.exe"
@@ -54,9 +67,15 @@ def ensure_elevated():
     if is_admin():
         return True
     try:
-        ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable,
-            '"{}" {}'.format(__file__, " ".join(sys.argv[1:])), APP_DIR, 1)
+        if getattr(sys, "frozen", False):
+            # 打包后 sys.executable 就是 exe 本身，直接带参数重启
+            ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable,
+                " ".join(sys.argv[1:]), APP_DIR, 1)
+        else:
+            ctypes.windll.shell32.ShellExecuteW(
+                None, "runas", sys.executable,
+                '"{}" {}'.format(__file__, " ".join(sys.argv[1:])), APP_DIR, 1)
     except Exception:
         pass
     return False
@@ -763,7 +782,7 @@ def gui_main():
             sb = self._selected_sandbox()
             if not sb:
                 return
-            ps1 = os.path.join(APP_DIR, "沙箱桌面客户端.ps1")
+            ps1 = os.path.join(RESOURCE_DIR, "沙箱桌面客户端.ps1")
             if not os.path.isfile(ps1):
                 messagebox.showerror("打开桌面版", "找不到客户端脚本：\n{}".format(ps1))
                 return
@@ -999,7 +1018,7 @@ def gui_main():
 
     root = tk.Tk()
     # 设置窗口图标
-    _icon = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sandbox.ico")
+    _icon = os.path.join(RESOURCE_DIR, "sandbox.ico")
     if os.path.isfile(_icon):
         try:
             root.iconbitmap(_icon)
