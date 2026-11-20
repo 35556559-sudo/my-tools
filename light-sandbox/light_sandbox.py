@@ -189,8 +189,9 @@ def validate_name(name):
     return None
 
 
-def gen_password(n=12):
-    return "".join(secrets.choice(PASSWORD_CHARS) for _ in range(n))
+def gen_password(n=6):
+    """6 位纯数字密码：沙箱账户只做数据隔离、不对外登录，纯数字在登录框里最好输入"""
+    return "".join(secrets.choice("0123456789") for _ in range(n))
 
 
 def kill_account_processes(account):
@@ -318,9 +319,18 @@ def create_sandbox(name, as_admin=True):
     # 2) 建账户
     code, out = run_cmd(["net", "user", account, password, "/add"], timeout=60)
     if code != 0:
-        shutil.rmtree(sdir, ignore_errors=True)
-        return False, "创建账户失败：{}".format(out.strip() or code)
+        # 本机若启用了「密码必须符合复杂性要求」，6 位纯数字会被拒绝：换强密码重试一次
+        pwd2 = "".join(secrets.choice(PASSWORD_CHARS) for _ in range(12))
+        code, out = run_cmd(["net", "user", account, pwd2, "/add"], timeout=60)
+        if code != 0:
+            shutil.rmtree(sdir, ignore_errors=True)
+            return False, "创建账户失败：{}\n（提示：本机可能启用了密码复杂性策略，可在「本地安全策略」→「账户策略」→「密码策略」中确认）".format(out.strip() or code)
+        password = pwd2
     time.sleep(1)   # 等 SAM 状态落定，避免新账户立即使用时的竞态
+
+    # 2.1) 密码永不过期：本地账户默认 42 天到期，到期后 RDP 登录会弹「你的密码已过期，必须更改」
+    run_cmd(["powershell.exe", "-NoProfile", "-Command",
+             "Set-LocalUser -Name {} -PasswordNeverExpires $true".format(account)], timeout=30)
 
     # 3) 加入管理员组（勾选"管理员账户"时）
     if as_admin:
@@ -594,7 +604,7 @@ def gui_main():
             ttk.Button(tools, text="显示沙箱密码", command=self.do_showpass).pack(side="left", padx=3)
             ttk.Button(tools, text="刷新", command=self.refresh).pack(side="left", padx=3)
 
-            # 代理控制区（tizi 翻墙沙箱用）
+            # 代理控制区（沙箱内单独走代理，实现网络隔离）
             proxy_frame = ttk.LabelFrame(right, text="网络代理", padding=8)
             proxy_frame.pack(fill="x", pady=8)
             self.proxy_status = tk.StringVar(value="代理模式")
