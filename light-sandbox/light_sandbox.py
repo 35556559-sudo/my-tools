@@ -194,6 +194,47 @@ def gen_password(n=6):
     return "".join(secrets.choice("0123456789") for _ in range(n))
 
 
+# 这些字符会被 net user / PowerShell 当命令行特殊符号，密码里出现必须拦下来
+PWD_BAD_CHARS = '"\'&|<>^%$`!;'
+
+
+def check_password_chars(pwd):
+    """校验用户自填密码，返回错误信息或 None。只挡会破坏命令行的字符和明显不合规的长度。"""
+    if len(pwd) < 4:
+        return "密码至少 4 位，太短容易被撞开"
+    if len(pwd) > 64:
+        return "密码太长了（最多 64 位）"
+    hit = [c for c in PWD_BAD_CHARS if c in pwd]
+    if hit:
+        return "密码里不能有这些字符：{}（会被系统当命令行符号，导致改密码失败）".format(" ".join(hit))
+    return None
+
+
+def set_sandbox_password(account, new_pwd):
+    """改沙箱账户密码，并顺带确保永不过期。返回 (ok, msg)。
+
+    必须走这里改：账户密码和 config.json 里的 password 要一起变，
+    只改一处会出现「界面显示的密码登不进去」。"""
+    if not account:
+        return False, "缺少账户名"
+    new_pwd = (new_pwd or "").strip()
+    if not new_pwd:
+        return False, "密码不能为空"
+    err = check_password_chars(new_pwd)
+    if err:
+        return False, err
+    code, out = run_cmd(["net", "user", account], timeout=30)
+    if code != 0:
+        return False, "账户 {} 不存在（沙箱可能被删过）".format(account)
+    code, out = run_cmd(["net", "user", account, new_pwd], timeout=60)
+    if code != 0:
+        return False, ("改密码失败：{}\n（本机若启用了「密码必须符合复杂性要求」，"
+                       "纯数字或太短会被拒绝，改用大小写字母+数字试试）").format(out.strip() or code)
+    run_cmd(["powershell.exe", "-NoProfile", "-Command",
+             "Set-LocalUser -Name {} -PasswordNeverExpires $true".format(account)], timeout=30)
+    return True, ""
+
+
 def kill_account_processes(account):
     """结束某沙箱账户名下的所有进程。用 taskkill 按用户名过滤，比 CIM 遍历快得多。"""
     run_cmd(["taskkill", "/F", "/IM", "*", "/FI", "USERNAME eq {}".format(account)], timeout=15)
@@ -294,8 +335,10 @@ def relocate_profile(account, password, profile_root):
     return False, "联接创建失败：{}".format((out or "").strip()[:120]), target
 
 
-def create_sandbox(name, as_admin=True):
-    """创建沙箱：独立数据目录 + 独立 Windows 账户（默认管理员成员，方便安装软件）"""
+def create_sandbox(name, as_admin=True, password=None):
+    """创建沙箱：独立数据目录 + 独立 Windows 账户（默认管理员成员，方便安装软件）
+
+    password 留空则自动生成 6 位纯数字；填了就用用户自己的（登录时好输）。"""
     err = validate_name(name)
     if err:
         return False, err
@@ -304,7 +347,11 @@ def create_sandbox(name, as_admin=True):
         return False, "沙箱「{}」已存在".format(name)
 
     account = "sb_" + name
-    password = gen_password()
+    custom = (password or "").strip()
+    bad = check_password_chars(custom) if custom else None
+    if bad:
+        return False, bad
+    password = custom or gen_password()
     root = cfg["sandbox_root"]
     sdir = sandbox_dir(root, name)
 
@@ -319,6 +366,11 @@ def create_sandbox(name, as_admin=True):
     # 2) 建账户
     code, out = run_cmd(["net", "user", account, password, "/add"], timeout=60)
     if code != 0:
+        if custom:
+            # 用户自己填的密码被策略拒绝时不偷偷换成随机密码，直接说清楚
+            shutil.rmtree(sdir, ignore_errors=True)
+            return False, ("设置你填的密码失败：{}\n（本机可能启用了「密码必须符合复杂性要求」，纯数字或太短会被拒；"
+                           "可改用含大小写字母+数字的密码，或把密码框留空让软件自动生成）").format(out.strip() or code)
         # 本机若启用了「密码必须符合复杂性要求」，6 位纯数字会被拒绝：换强密码重试一次
         pwd2 = "".join(secrets.choice(PASSWORD_CHARS) for _ in range(12))
         code, out = run_cmd(["net", "user", account, pwd2, "/add"], timeout=60)
@@ -417,6 +469,49 @@ def _require_sandbox(name):
     return sb, None
 
 
+def split_args(args):
+    """按 Windows 原生规则把 args 字符串拆成参数列表（等于程序收到的 argv）。
+
+    不能用 shlex（两处实测踩坑）：
+      - posix=True：把反斜杠当转义符吃掉，`--user-data-dir=D:\\MyData\\prof` 变成
+        `D:MyDataprof`，路径失效，浏览器只好把整个 profile 写进一个畸形名字的目录；
+      - posix=False：不认引号分组，`--user-data-dir="C:\\...\\User Data"` 被从中间拆断。
+    CommandLineToArgvW 才是 Windows 自己的解析器，反斜杠和引号语义都与浏览器一致。"""
+    if not args:
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+        argc = wintypes.INT(0)
+        fn = ctypes.windll.shell32.CommandLineToArgvW
+        fn.restype = ctypes.POINTER(ctypes.c_wchar_p)
+        fn.argtypes = (ctypes.c_wchar_p, ctypes.POINTER(wintypes.INT))
+        argv = fn("x " + args, ctypes.byref(argc))
+        if not argv:
+            raise OSError("CommandLineToArgvW 调用失败")
+        try:
+            # argv[0] 是我们垫的占位符：Windows 把首个 token 当程序名，对它的引号处理规则不同
+            # （实测 `--user-data-dir="C:\x\User Data"` 放首位会被从空格处拆断并留下引号），
+            # 垫一个 token 后所有真实参数都按普通参数规则解析，与浏览器实际收到的 argv 一致。
+            return [argv[i] for i in range(1, argc.value)]
+        finally:
+            ctypes.windll.kernel32.LocalFree(argv)
+    except Exception:
+        # 兜底：极端环境下退化为按空格拆（不加引号的简单参数仍然正确）
+        return args.split()
+
+
+def set_proxy_flag(args, proxy_flag):
+    """只增删 --proxy-server=... 这一段，其余 token（含 Windows 路径）原样保留。
+
+    不要用 shlex.split + join 重写整条 args：那会把路径里的反斜杠吃掉并写回配置。"""
+    s = re.sub(r'--proxy-server=\S+', ' ', args or '')
+    s = re.sub(r'\s+', ' ', s).strip()
+    if proxy_flag:
+        s = (proxy_flag + " " + s).strip()
+    return s
+
+
 def launch(sb, exe, args=None, progress=None):
     """以沙箱账户在桌面启动程序（安装程序 / 应用本体均可）"""
     if exe.lower().endswith(".lnk"):
@@ -433,7 +528,7 @@ def launch(sb, exe, args=None, progress=None):
     cmd = build_psexec_base(sb) + [exe]
     if args:
         if isinstance(args, str):
-            cmd += shlex.split(args)
+            cmd += split_args(args)
         else:
             cmd += list(args)
     code, out = run_cmd(cmd, timeout=60)
@@ -606,6 +701,9 @@ def gui_main():
             ttk.Label(left, text="新沙箱名称（英文/数字/下划线）", font=("Microsoft YaHei", 9)).pack(anchor="w")
             self.name_var = tk.StringVar()
             ttk.Entry(left, textvariable=self.name_var, width=26).pack(fill="x", pady=3)
+            ttk.Label(left, text="沙箱密码（留空＝自动生成 6 位纯数字）", font=("Microsoft YaHei", 9)).pack(anchor="w")
+            self.pwd_var = tk.StringVar()
+            ttk.Entry(left, textvariable=self.pwd_var, width=26).pack(fill="x", pady=3)
             self.admin_var = tk.BooleanVar(value=True)
             ttk.Checkbutton(left, text="沙箱账户设为管理员（默认，便于安装软件）",
                             variable=self.admin_var).pack(anchor="w", pady=2)
@@ -638,8 +736,11 @@ def gui_main():
             tools.pack(fill="x")
             ttk.Button(tools, text="打开沙箱目录", command=self.do_opendir).pack(side="left", padx=3)
             ttk.Button(tools, text="沙箱命令行 CMD", command=self.do_cmd).pack(side="left", padx=3)
-            ttk.Button(tools, text="显示沙箱密码", command=self.do_showpass).pack(side="left", padx=3)
             ttk.Button(tools, text="刷新", command=self.refresh).pack(side="left", padx=3)
+            tools2 = ttk.Frame(tools)
+            tools2.pack(fill="x", pady=(4, 0))
+            ttk.Button(tools2, text="显示沙箱密码", command=self.do_showpass).pack(side="left", padx=3)
+            ttk.Button(tools2, text="修改沙箱密码", command=self.do_changepass).pack(side="left", padx=3)
 
             # 代理控制区（沙箱内单独走代理，实现网络隔离）
             proxy_frame = ttk.LabelFrame(right, text="网络代理", padding=8)
@@ -733,6 +834,12 @@ def gui_main():
             if not name:
                 messagebox.showwarning("新建沙箱", "请先输入新沙箱名称")
                 return
+            pwd = self.pwd_var.get().strip()
+            if pwd:
+                err = check_password_chars(pwd)
+                if err:
+                    messagebox.showwarning("新建沙箱", err)
+                    return
             # 放到后台线程跑，避免建账户+首次登录+robocopy 迁移配置目录时 GUI 卡死（AppHang）
             self.status.set("正在创建沙箱「{}」：建账户、首次登录、迁移配置目录到 E 盘，请耐心等待（约 1~2 分钟）…".format(name))
             self.root.update_idletasks()
@@ -740,7 +847,7 @@ def gui_main():
 
             def worker():
                 try:
-                    ok, msg = create_sandbox(name, as_admin=as_admin)
+                    ok, msg = create_sandbox(name, as_admin=as_admin, password=pwd)
                 except Exception as e:
                     import traceback
                     ok, msg = False, "创建过程中发生异常：{}\n\n{}".format(e, traceback.format_exc())
@@ -748,6 +855,7 @@ def gui_main():
                     messagebox.showinfo("新建沙箱" if ok else "无法新建", msg)
                     if ok:
                         self.name_var.set("")
+                        self.pwd_var.set("")
                         self.refresh()
                         for i, sb in enumerate(self.cfg["sandboxes"]):
                             if sb["name"] == name:
@@ -969,6 +1077,44 @@ def gui_main():
                                 "账户：{}\n密码：{}\n（密码仅用于以账户模式启动，一般无需使用）".format(
                                     sb["account"], sb["password"]))
 
+        def do_changepass(self):
+            """手工改沙箱密码：Windows 账户和 config 必须一起改，只改一处会登不进去"""
+            sb = self._selected_sandbox()
+            if not sb:
+                return
+            from tkinter import simpledialog
+            old = sb.get("password", "")
+            if not messagebox.askyesno(
+                    "修改沙箱密码",
+                    "沙箱：{}\n账户：{}\n当前密码：{}\n\n继续填新密码？".format(
+                        sb["name"], sb["account"], old)):
+                return
+            new = simpledialog.askstring(
+                "修改沙箱密码",
+                "给账户 {} 设新密码（至少 4 位；别用这些字符：{})".format(
+                    sb["account"], " ".join(list(PWD_BAD_CHARS))),
+                parent=self.root)
+            if new is None:
+                return
+            new = new.strip()
+            if new == old:
+                messagebox.showinfo("修改沙箱密码", "新密码跟当前密码一样，没做改动")
+                return
+            self.status.set("正在修改沙箱「{}」的密码…".format(sb["name"]))
+            self.root.update_idletasks()
+            ok, msg = set_sandbox_password(sb["account"], new)
+            if not ok:
+                messagebox.showerror("改密码失败", msg)
+                self.refresh_status()
+                return
+            sb["password"] = new
+            save_config(self.cfg)
+            self.show_detail()
+            self.refresh_status()
+            messagebox.showinfo("修改沙箱密码",
+                                "已改好。\n账户：{}\n新密码：{}\n\n下次进沙箱用这个密码（已设为永不过期）。".format(
+                                    sb["account"], new))
+
         # ---------- 代理控制 ----------
         def _update_app_proxy_args(self, sb):
             """根据 sb 的 proxy_port / proxy_enabled 更新所有应用的 args 里的 --proxy-server"""
@@ -979,13 +1125,8 @@ def gui_main():
                 args = app.get("args", "")
                 if not args:
                     continue
-                # 先去掉旧的 --proxy-server=...
-                parts = shlex.split(args) if args else []
-                parts = [p for p in parts if not p.startswith("--proxy-server=")]
-                if enabled:
-                    # 插到最前面
-                    parts.insert(0, proxy_flag)
-                app["args"] = " ".join('"{}"'.format(p) if " " in p else p for p in parts)
+                # 只增删代理那一段；绝不整条 split/join，否则 Windows 路径的反斜杠会被吃掉并写回配置
+                app["args"] = set_proxy_flag(args, proxy_flag if enabled else "")
             # 同步更新 Firefox 的 user.js（如果有 Firefox）
             ff_dir = None
             for app in sb["apps"]:
