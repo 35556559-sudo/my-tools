@@ -419,6 +419,13 @@ def _require_sandbox(name):
 
 def launch(sb, exe, args=None, progress=None):
     """以沙箱账户在桌面启动程序（安装程序 / 应用本体均可）"""
+    if exe.lower().endswith(".lnk"):
+        # 兼容历史遗留配置：早期可能把快捷方式直接记进了 exe 字段
+        resolved = resolve_exe_target(exe)
+        if resolved.lower().endswith(".lnk"):
+            return False, ("登记的是快捷方式且解析不出目标程序，请重新「添加程序」选择 .exe 主程序：\n{}"
+                           .format(exe))
+        exe = resolved
     if not os.path.isfile(exe):
         return False, "找不到程序：{}".format(exe)
     if not ensure_psexec(progress):
@@ -437,8 +444,38 @@ def launch(sb, exe, args=None, progress=None):
     return True, "已以「{}」账户启动：{}".format(sb["account"], os.path.basename(exe))
 
 
+def resolve_exe_target(path):
+    """把 .lnk 快捷方式解析成它真正指向的程序。
+
+    README 教用户「直接到桌面选软件图标」，但快捷方式不是可执行文件：
+    不解析就会把 .lnk 记进配置，PsExec 拿它当 exe 启动必然失败（表现为"点了没反应"）。
+    解析不出目标就返回原路径，交给调用方判断。"""
+    if not path or not path.lower().endswith(".lnk"):
+        return path
+    ps = ("$ws = New-Object -ComObject WScript.Shell; "
+          "$sc = $ws.CreateShortcut('{lnk}'); "
+          "Write-Output $sc.TargetPath").format(lnk=path.replace("'", "''"))
+    code, out = run_cmd(["powershell", "-NoProfile", "-Command", ps], timeout=30)
+    lines = [x for x in (out or "").splitlines() if x.strip()]
+    target = lines[-1].strip() if lines else ""
+    if target and os.path.isfile(target):
+        return target
+    return path
+
+
 def add_app(sb, exe, alias=None):
     """把程序记入沙箱的应用列表（只登记，不启动）"""
+    exe = resolve_exe_target(exe)
+    if not os.path.isfile(exe):
+        return False, "找不到可执行的程序文件，请改选软件安装目录里的主程序（.exe）"
+    base = os.path.basename(exe).lower()
+    if base in ("python.exe", "pythonw.exe"):
+        return False, ("你选中的是 Python 解释器（python / pythonw），不是软件本体，"
+                       "这样登记后名字会显示成 pythonw，而且启动后会立刻退出。\n\n"
+                       "正确做法：\n"
+                       "· 软件已打包好 → 选它 dist 文件夹里的 .exe\n"
+                       "· 软件还是 .py 脚本 → 先打包成 exe 再添加\n"
+                       "· 从桌面选 → 直接选那个软件图标（快捷方式会自动识别真正的程序）")
     for app in sb["apps"]:
         if app["exe"].lower() == exe.lower():
             return False, "该程序已在列表中"
